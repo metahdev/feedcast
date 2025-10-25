@@ -102,8 +102,8 @@ async def startup_handler(ctx: Context):
     conversation_state["query_count"] = 0
     conversation_state["is_active"] = True
     
-    # Set the KnowledgeAgent address - updated with the actual address
-    KNOWLEDGE_AGENT_ADDRESS = "agent1qdyhxh77p4p23etzsjq8nxafxwmuv0hqk2ndw4v7qksn9gtcn4rnctle54f"
+    # Set the KnowledgeAgent address - updated with correct address
+    KNOWLEDGE_AGENT_ADDRESS = "agent1q0c585dkzj568slxaq7y090h7z8v9p366895ee0e6tausae6u3fsjps2y6k"
     ctx.logger.info(f"KnowledgeAgent address set to: {KNOWLEDGE_AGENT_ADDRESS}")
 
 if __name__ == "__main__":
