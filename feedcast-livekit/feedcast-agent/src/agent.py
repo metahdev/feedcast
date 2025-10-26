@@ -15,6 +15,7 @@ from livekit.agents import (
     JobProcess,
     MetricsCollectedEvent,
     RoomInputOptions,
+    RoomOutputOptions,
     WorkerOptions,
     cli,
     metrics,
@@ -55,7 +56,12 @@ Remember: This is a voice conversation, so speak naturally and keep it engaging!
             interests = podcast_context.get("podcast_interests", "")
             episode = podcast_context.get("current_episode", "")
             episode_description = podcast_context.get("episode_description", "")
-            transcript = podcast_context.get("episode_transcript", "")
+            transcript_json = podcast_context.get("episode_transcript", "")
+            
+            logger.info(f"🤖 Initializing PodcastAssistant with context:")
+            logger.info(f"   Title: {title}")
+            logger.info(f"   Episode: {episode}")
+            logger.info(f"   Transcript JSON length: {len(transcript_json)} chars")
             
             context_addendum = f"""
 
@@ -68,13 +74,29 @@ CURRENT PODCAST CONTEXT:
 
 The user is specifically discussing this podcast. Reference these details naturally in your responses and ask relevant questions about the content."""
             
-            # Add transcript if available
-            if transcript:
-                # Truncate if too long (keep first ~3000 chars for context)
-                if len(transcript) > 3000:
-                    transcript = transcript[:3000] + "\n... (transcript continues)"
-                
-                context_addendum += f"""
+            # Parse and format transcript if available
+            transcript = ""
+            if transcript_json:
+                try:
+                    import json
+                    # Parse JSON array of segments
+                    segments = json.loads(transcript_json)
+                    logger.info(f"📝 Parsed transcript: {len(segments)} segments")
+                    
+                    # Format with timestamps
+                    formatted_lines = []
+                    for segment in segments:
+                        start_time = segment.get("startTime", 0)
+                        text = segment.get("text", "")
+                        minutes = int(start_time // 60)
+                        seconds = int(start_time % 60)
+                        formatted_lines.append(f"[{minutes}:{seconds:02d}] {text}")
+                    
+                    transcript = "\n".join(formatted_lines)
+                    logger.info(f"📝 Formatted transcript: {len(transcript)} chars")
+                    
+                    # Add to context
+                    context_addendum += f"""
 
 EPISODE TRANSCRIPT:
 The following is the full transcript of the episode the user is listening to. Use this to answer specific questions about what was said, discussed, or mentioned in the episode.
@@ -82,10 +104,17 @@ The following is the full transcript of the episode the user is listening to. Us
 {transcript}
 
 When the user asks about specific content, quotes, or topics from the episode, reference this transcript to provide accurate, specific answers."""
+                except Exception as e:
+                    logger.error(f"⚠️ Failed to parse transcript: {e}")
+                    logger.info(f"📝 Raw transcript: {transcript_json[:200]}...")
+            else:
+                logger.info("⚠️ No transcript found in podcast context")
             
             instructions = base_instructions + context_addendum
+            logger.info(f"📝 Final instructions length: {len(instructions)} chars")
         else:
             instructions = base_instructions
+            logger.info("⚠️ No podcast context provided, using generic instructions")
         
         super().__init__(instructions=instructions)
 
@@ -122,47 +151,95 @@ async def entrypoint(ctx: JobContext):
     podcast_context = None
     await ctx.connect()
     
-    # Wait a moment for participants to join
+    # Wait a bit for participants to join
     import asyncio
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(1.0)
     
     # Look for user participant and extract metadata
-    for participant in ctx.room.remote_participants.values():
+    # Check all participants (remote and local)
+    all_participants = list(ctx.room.remote_participants.values())
+    if ctx.room.local_participant:
+        all_participants.append(ctx.room.local_participant)
+    
+    logger.info(f"Looking for participants with metadata. Found {len(all_participants)} participants")
+    
+    for participant in all_participants:
+        if participant.metadata:
+            try:
+                import json
+                metadata = json.loads(participant.metadata)
+                logger.info(f"Found metadata for participant {participant.identity}: {metadata.keys()}")
+                
+                # Log ENTIRE metadata for debugging
+                logger.info(f"🔍 Full metadata: {json.dumps(metadata, indent=2)[:500]}")  # First 500 chars
+                
+                if "podcast_title" in metadata:
+                    podcast_context = metadata
+                    logger.info(f"📦 Loaded podcast context: {metadata.get('podcast_title')}")
+                    logger.info(f"📦 Episode: {metadata.get('current_episode', 'N/A')}")
+                    
+                    # Log transcript availability
+                    transcript = metadata.get("episode_transcript", "")
+                    if transcript:
+                        logger.info(f"📝 Transcript available: {len(transcript)} characters")
+                        
+                        # Log a sample of the transcript
+                        sample = transcript[:200]
+                        logger.info(f"📝 Transcript sample: {sample}...")
+                    else:
+                        logger.info("⚠️ No transcript found in metadata")
+                        logger.info(f"📋 Metadata keys available: {list(metadata.keys())}")
+                    
+                    break
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse participant metadata for {participant.identity}: {e}")
+                logger.warning(f"Raw metadata: {participant.metadata[:200]}")
+    
+    # Storage for data channel transcript
+    transcript_received = {"data": None}
+    
+    # Listen for data channel messages (for transcript)
+    @ctx.room.on("data_received")
+    def on_data_received(data_packet):
+        logger.info(f"📥 Received data via data channel")
+        try:
+            import json
+            # Try to decode as JSON (the transcript)
+            transcript_json = data_packet.data.decode('utf-8')
+            logger.info(f"📝 Received transcript via data channel: {len(transcript_json)} chars")
+            
+            # Store transcript
+            transcript_received["data"] = transcript_json
+            podcast_context["episode_transcript"] = transcript_json
+            logger.info(f"✅ Transcript stored in context")
+            
+            # Log a sample
+            sample = transcript_json[:200]
+            logger.info(f"📝 Transcript sample: {sample}...")
+            
+        except Exception as e:
+            logger.error(f"⚠️ Failed to process data channel message: {e}")
+    
+    # Also listen for new participants or metadata updates
+    @ctx.room.on("participant_connected")
+    def on_participant_connected(participant):
+        logger.info(f"📱 New participant connected: {participant.identity}")
         if participant.metadata:
             try:
                 import json
                 metadata = json.loads(participant.metadata)
                 if "podcast_title" in metadata:
-                    podcast_context = metadata
-                    logger.info(f"📦 Loaded podcast context: {metadata.get('podcast_title')}")
-                    
-                    # Log transcript availability
-                    if "episode_transcript" in metadata:
-                        transcript_len = len(metadata.get("episode_transcript", ""))
-                        logger.info(f"📝 Transcript available: {transcript_len} characters")
-                    else:
-                        logger.info("⚠️ No transcript found in metadata")
-                    
-                    break
-            except json.JSONDecodeError:
-                logger.warning("Failed to parse participant metadata")
+                    logger.info(f"📦 Received podcast context from new participant: {metadata.get('podcast_title')}")
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse new participant metadata: {e}")
     
-    # Also listen for transcript via data channel
-    @ctx.room.on("data_received")
-    def on_data_received(data_packet):
-        try:
-            import json
-            data = json.loads(data_packet.data.decode('utf-8'))
-            if data.get("type") == "podcast_transcript":
-                logger.info(f"📤 Received transcript via data channel: {len(data.get('segments', []))} segments")
-                if not podcast_context:
-                    podcast_context = {}
-                # Convert segments back to formatted transcript
-                segments = data.get("segments", [])
-                transcript_text = "\n".join([f"[{int(s['startTime']//60)}:{int(s['startTime']%60):02d}] {s['text']}" for s in segments])
-                podcast_context["episode_transcript"] = transcript_text
-        except Exception as e:
-            logger.error(f"Failed to process data channel message: {e}")
+    # Wait a bit for data channel transcript to arrive
+    await asyncio.sleep(0.5)
+    
+    # Check if transcript was received via data channel
+    if podcast_context and not podcast_context.get("episode_transcript") and transcript_received["data"]:
+        logger.info("📝 Adding transcript from data channel to context")
+        podcast_context["episode_transcript"] = transcript_received["data"]
     
     if not podcast_context:
         logger.info("ℹ️ No podcast context found, using generic assistant")
@@ -187,14 +264,15 @@ async def entrypoint(ctx: JobContext):
         preemptive_generation=True,
     )
 
-    # To use a realtime model instead of a voice pipeline, use the following session setup instead.
-    # (Note: This is for the OpenAI Realtime API. For other providers, see https://docs.livekit.io/agents/models/realtime/))
-    # 1. Install livekit-agents[openai]
+    # To get transcriptions for BOTH user AND agent speech, use OpenAI Realtime API instead.
+    # Benefits: Agent speech is transcribed too, so users can see both sides of the conversation
+    # Steps to enable:
+    # 1. Install: pip install 'livekit-agents[openai]'
     # 2. Set OPENAI_API_KEY in .env.local
-    # 3. Add `from livekit.plugins import openai` to the top of this file
-    # 4. Use the following session setup instead of the version above
+    # 3. Uncomment the import at the top: `from livekit.plugins import openai`
+    # 4. Replace the session setup above with this:
     # session = AgentSession(
-    #     llm=openai.realtime.RealtimeModel(voice="marin")
+    #     llm=openai.realtime.RealtimeModel(voice="marin")  # or "ember", "crimson", "sage", etc.
     # )
 
     # Metrics collection, to measure pipeline performance
@@ -227,6 +305,10 @@ async def entrypoint(ctx: JobContext):
         room_input_options=RoomInputOptions(
             # For telephony applications, use `BVCTelephony` for best results
             noise_cancellation=noise_cancellation.BVC(),
+        ),
+        room_output_options=RoomOutputOptions(
+            # Enable transcriptions so agent speech appears in the UI
+            transcription_enabled=True,
         ),
     )
 
