@@ -1,0 +1,159 @@
+INFO:__main__:================================================================================
+INFO:__main__:🎙️  OPTIMIZED PODCAST GENERATION TEST
+INFO:__main__:================================================================================
+INFO:__main__:Started at: 2025-10-26T02:55:25.527689
+INFO:__main__:Target: Complete in under 2 minutes
+
+INFO:__main__:Initializing services...
+INFO:podcast_generation.claude_service:Claude service initialized with model: claude-sonnet-4-20250514
+INFO:podcast_generation.fact_checker:FactChecker initialized
+INFO:podcast_generation.generator:PodcastGenerator initialized with performance optimizations
+INFO:__main__:
+📋 Podcast Request:
+INFO:__main__:   Duration: 5 minutes
+INFO:__main__:   Format: monologue
+INFO:__main__:   Segments: 3
+INFO:__main__:   Topics: artificial intelligence
+
+INFO:__main__:🚀 Starting OPTIMIZED podcast generation...
+INFO:__main__:--------------------------------------------------------------------------------
+
+INFO:podcast_generation.generator:Starting podcast generation for user test-user-optimized
+INFO:podcast_generation.generator:Research mode: Event Discovery
+INFO:podcast_generation.generator:Step 1: Loading user context
+INFO:podcast_generation.generator:Loading user context for user: test-user-optimized
+INFO:httpx:HTTP Request: GET https://slejufflrwoesnoooldm.supabase.co/rest/v1/users?select=preferences%2C%20listening_stats%2C%20created_at&id=eq.test-user-optimized "HTTP/1.1 400 Bad Request"
+ERROR:podcast_generation.generator:Failed to load user context for test-user-optimized: {'code': '22P02', 'details': None, 'hint': None, 'message': 'invalid input syntax for type uuid: "test-user-optimized"'}
+INFO:podcast_generation.generator:Step 2: Researching topics
+INFO:podcast_generation.generator:Using EVENT DISCOVERY pipeline
+INFO:podcast_generation.generator:🚀 OPTIMIZED: Research starting for 1 topics: ['artificial intelligence']
+INFO:podcast_generation.generator:⚡ Discovering events for 1 topics in parallel
+INFO:podcast_generation.generator:🚀 OPTIMIZED: Discovering news events for topic: artificial intelligence, timeframe: this week
+INFO:podcast_generation.generator:⚡ Executing 4 parallel searches with 5s timeout
+INFO:podcast_generation.claude_service:Performing web search for: artificial intelligence news this week
+INFO:httpx:HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Web search completed. Found 10 results
+INFO:podcast_generation.claude_service:Performing web search for: artificial intelligence latest 2025
+INFO:httpx:HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Web search completed. Found 10 results
+INFO:podcast_generation.claude_service:Performing web search for: artificial intelligence announcement this week
+INFO:httpx:HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Web search completed. Found 10 results
+INFO:podcast_generation.claude_service:Performing web search for: breaking artificial intelligence development
+INFO:httpx:HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Web search completed. Found 10 results
+INFO:podcast_generation.generator:✅ Searches completed in 139.9s
+INFO:podcast_generation.generator:📄 Found 10 unique articles
+INFO:podcast_generation.generator:⬇️  Fetching 8 sources in parallel (8s timeout)
+INFO:podcast_generation.claude_service:Fetching content from: https://techcrunch.com/category/artificial-intelligence/
+INFO:podcast_generation.claude_service:Fetching content from: https://www.nbcnews.com/artificial-intelligence
+INFO:podcast_generation.claude_service:Fetching content from: https://www.sciencedaily.com/news/computers_math/artificial_intelligence/
+INFO:podcast_generation.claude_service:Fetching content from: https://www.crescendo.ai/news/latest-ai-news-and-updates
+INFO:podcast_generation.claude_service:Fetching content from: https://news.microsoft.com/source/features/ai/6-ai-trends-youll-see-more-of-in-2025/
+INFO:podcast_generation.claude_service:Fetching content from: https://www.technologyreview.com/2025/01/08/1109188/whats-next-for-ai-in-2025/
+INFO:podcast_generation.claude_service:Fetching content from: https://www.artificialintelligence-news.com/
+INFO:podcast_generation.claude_service:Fetching content from: https://www.livescience.com/technology/artificial-intelligence/do-you-think-we-should-stop-the-progress-of-ai-before-it-becomes-a-threat-to-our-species
+INFO:httpx:HTTP Request: GET https://www.technologyreview.com/2025/01/08/1109188/whats-next-for-ai-in-2025/ "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://techcrunch.com/category/artificial-intelligence/ "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Successfully fetched content from https://www.technologyreview.com/2025/01/08/1109188/whats-next-for-ai-in-2025/ (10015 chars)
+INFO:podcast_generation.claude_service:Successfully fetched content from https://techcrunch.com/category/artificial-intelligence/ (5668 chars)
+INFO:httpx:HTTP Request: GET https://www.sciencedaily.com/news/computers_math/artificial_intelligence/ "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://news.microsoft.com/source/features/ai/6-ai-trends-youll-see-more-of-in-2025/ "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Successfully fetched content from https://news.microsoft.com/source/features/ai/6-ai-trends-youll-see-more-of-in-2025/ (10015 chars)
+INFO:httpx:HTTP Request: GET https://www.crescendo.ai/news/latest-ai-news-and-updates "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Successfully fetched content from https://www.sciencedaily.com/news/computers_math/artificial_intelligence/ (10015 chars)
+INFO:httpx:HTTP Request: GET https://www.nbcnews.com/artificial-intelligence "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Successfully fetched content from https://www.crescendo.ai/news/latest-ai-news-and-updates (10015 chars)
+INFO:podcast_generation.claude_service:Successfully fetched content from https://www.nbcnews.com/artificial-intelligence (9025 chars)
+INFO:httpx:HTTP Request: GET https://www.livescience.com/technology/artificial-intelligence/do-you-think-we-should-stop-the-progress-of-ai-before-it-becomes-a-threat-to-our-species "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Successfully fetched content from https://www.livescience.com/technology/artificial-intelligence/do-you-think-we-should-stop-the-progress-of-ai-before-it-becomes-a-threat-to-our-species (10015 chars)
+INFO:httpx:HTTP Request: GET https://www.artificialintelligence-news.com/ "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Successfully fetched content from https://www.artificialintelligence-news.com/ (10015 chars)
+INFO:podcast_generation.generator:✅ Fetched 8/8 articles in 1.0s
+INFO:podcast_generation.generator:🧠 Extracting events from 8 sources (single API call)
+INFO:podcast_generation.claude_service:Generating completion with 1 messages, max_tokens=3000
+INFO:httpx:HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Completion generated successfully (5730 chars)
+WARNING:podcast_generation.generator:Failed to parse JSON from response: Expecting value: line 1 column 1 (char 0)
+INFO:podcast_generation.generator:Extracted 8 events from markdown
+INFO:podcast_generation.generator:✅ Extracted 8 events in 24.7s
+INFO:podcast_generation.generator:🎉 Event discovery completed in 165.6s (cache: 0.0% hit rate)
+INFO:podcast_generation.generator:📊 Discovered 8 total events across 1 topics
+INFO:podcast_generation.generator:🔍 Quick verify: 0 auto-verified, verifying 3 uncertain
+INFO:podcast_generation.claude_service:Performing web search for: High school AI security system mistakes Doritos bag for firearm 2025-01-07
+INFO:httpx:HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Web search completed. Found 10 results
+INFO:podcast_generation.claude_service:Performing web search for: ChatGPT launches new app integrations with Spotify, Figma, and Canva 2025-01-06
+INFO:httpx:HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Web search completed. Found 10 results
+INFO:podcast_generation.claude_service:Performing web search for: White House expresses concern over new $100M pro-AI super PAC this week
+INFO:httpx:HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:podcast_generation.claude_service:Web search completed. Found 10 results
+INFO:podcast_generation.generator:✅ Verification completed in 95.1s
+INFO:podcast_generation.generator:🎉 Research completed in 260.6s: 8 events (cache: 0.0%)
+INFO:podcast_generation.generator:Discovered 8 events, verified 3
+ERROR:podcast_generation.generator:Podcast generation failed: 1 validation error for Source
+content_summary
+  String should have at most 500 characters [type=string_too_long, input_value='EVENT: High school AI se... security applications.', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_too_long
+ERROR:__main__:
+================================================================================
+ERROR:__main__:❌ PODCAST GENERATION FAILED after 261.1s
+ERROR:__main__:================================================================================
+ERROR:__main__:Error: 1 validation error for Source
+content_summary
+  String should have at most 500 characters [type=string_too_long, input_value='EVENT: High school AI se... security applications.', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_too_long
+ERROR:__main__:Traceback (most recent call last):
+  File "/Users/Tim/Desktop/Berkeley/hackathon/feedcast/backend/test_optimized_podcast.py", line 95, in generate_full_podcast
+    result = await generator.generate_podcast(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "/Users/Tim/Desktop/Berkeley/hackathon/feedcast/backend/podcast_generation/generator.py", line 192, in generate_podcast
+    source = Source(
+        url=url,
+    ...<4 lines>...
+        published_date=datetime.utcnow()
+    )
+  File "/Users/Tim/Desktop/Berkeley/hackathon/feedcast/venv/lib/python3.13/site-packages/pydantic/main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Source
+content_summary
+  String should have at most 500 characters [type=string_too_long, input_value='EVENT: High school AI se... security applications.', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_too_long
+
+Traceback (most recent call last):
+  File "/Users/Tim/Desktop/Berkeley/hackathon/feedcast/backend/test_optimized_podcast.py", line 192, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/Users/Tim/Desktop/Berkeley/hackathon/feedcast/backend/test_optimized_podcast.py", line 188, in main
+    await generate_full_podcast()
+  File "/Users/Tim/Desktop/Berkeley/hackathon/feedcast/backend/test_optimized_podcast.py", line 95, in generate_full_podcast
+    result = await generator.generate_podcast(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "/Users/Tim/Desktop/Berkeley/hackathon/feedcast/backend/podcast_generation/generator.py", line 192, in generate_podcast
+    source = Source(
+        url=url,
+    ...<4 lines>...
+        published_date=datetime.utcnow()
+    )
+  File "/Users/Tim/Desktop/Berkeley/hackathon/feedcast/venv/lib/python3.13/site-packages/pydantic/main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Source
+content_summary
+  String should have at most 500 characters [type=string_too_long, input_value='EVENT: High school AI se... security applications.', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_too_long

@@ -1,0 +1,68 @@
+INFO:podcast_generation.claude_service:Claude service initialized with model: claude-sonnet-4-20250514
+INFO:podcast_generation.fact_checker:FactChecker initialized
+INFO:podcast_generation.generator:PodcastGenerator initialized with performance optimizations
+INFO:httpx:HTTP Request: GET https://slejufflrwoesnoooldm.supabase.co/rest/v1/users?select=id%2C%20email&limit=5 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://slejufflrwoesnoooldm.supabase.co/rest/v1/user_interests?select=interest%2C%20weight&user_id=eq.0ab3d613-b53b-41f0-9442-47c9e05cf636 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://slejufflrwoesnoooldm.supabase.co/rest/v1/podcasts?select=id%2C%20title&user_id=eq.0ab3d613-b53b-41f0-9442-47c9e05cf636 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://slejufflrwoesnoooldm.supabase.co/rest/v1/episodes?select=id%2C%20title%2C%20created_at%2C%20podcast%3Apodcasts%28user_id%29 "HTTP/1.1 200 OK"
+================================================================================
+🎬 END-TO-END TEST: Real User Episode Generation
+================================================================================
+
+📦 STEP 1: Initializing services...
+✅ All services initialized
+
+👤 STEP 2: Finding a real user...
+✅ Using user: zhouhaitz@berkeley.edu
+   User ID: 0ab3d613-b53b-41f0-9442-47c9e05cf636
+
+📊 STEP 3: Getting user interests...
+✅ Found 3 interests:
+   - artificial intelligence (weight: 10)
+   - technology (weight: 8)
+   - science (weight: 6)
+
+   Using top 3: artificial intelligence, technology, science
+
+📻 STEP 4: Checking for existing podcast (show)...
+✅ User already has 6 podcast(s):
+   - Exploring artificial intelligence, artificial intelligence - Monologue Episode (ID: 9067f89c-ef58-4258-a36e-e2406a8f441c)
+   - Exploring artificial intelligence, artificial intelligence - Monologue Episode (ID: 68f970b7-9a27-40db-9289-5be131beabbb)
+   - Exploring artificial intelligence, artificial intelligence - Monologue Episode (ID: e3bba03f-d1a4-4066-b9ca-e6be005de716)
+   - Exploring artificial intelligence, artificial intelligence - Monologue Episode (ID: ef454fb7-2b12-465f-a566-1c94d0972870)
+   - Exploring artificial intelligence, artificial intelligence - Monologue Episode (ID: addc9083-5e0e-43c0-99ec-7d93bcc2cf96)
+   - Exploring artificial intelligence, artificial intelligence - Monologue Episode (ID: 0cafc9bc-aa35-4812-a441-9eed24c61641)
+
+📺 STEP 5: Checking existing episodes...
+ℹ️  No existing episodes - this will be the first!
+
+📝 STEP 6: Creating episode generation request...
+Traceback (most recent call last):
+  File "/Users/Tim/Desktop/Berkeley/hackathon/feedcast/backend/test_real_user_episode.py", line 287, in <module>
+    success = asyncio.run(test_real_user_episode())
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/Users/Tim/Desktop/Berkeley/hackathon/feedcast/backend/test_real_user_episode.py", line 142, in test_real_user_episode
+    PodcastSegmentRequest(
+    ~~~~~~~~~~~~~~~~~~~~~^
+        type=SegmentType.OUTRO,
+        ^^^^^^^^^^^^^^^^^^^^^^^
+        duration_minutes=1,
+        ^^^^^^^^^^^^^^^^^^^
+        topics=[]
+        ^^^^^^^^^
+    )
+    ^
+  File "/Users/Tim/Desktop/Berkeley/hackathon/feedcast/venv/lib/python3.13/site-packages/pydantic/main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for PodcastSegmentRequest
+topics
+  Value error, topics list cannot be empty [type=value_error, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.12/v/value_error
