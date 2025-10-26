@@ -10,13 +10,13 @@ import SwiftUI
 
 struct LibraryView: View {
     @StateObject private var viewModel = LibraryViewModel()
-    @State private var showingInterests = false
     @State private var showingNewPodcast = false
     
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+            ZStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
                     // Daily Podcast Section
                     if let daily = viewModel.dailyPodcast {
                         VStack(alignment: .leading, spacing: 12) {
@@ -25,42 +25,46 @@ struct LibraryView: View {
                                 .fontWeight(.bold)
                                 .padding(.horizontal)
                             
-                            NavigationLink(destination: PlayerView(podcast: daily)) {
+                            NavigationLink(destination: PodcastDetailView(podcast: daily)) {
                                 DailyPodcastCard(podcast: daily)
                                     .padding(.horizontal)
                             }
                         }
                         .padding(.top)
                     }
-                    
-                    // Recent Podcasts Grid
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Your Library")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                            
-                            Spacer()
-                            
-                            Menu {
-                                Picker("Sort", selection: $viewModel.sortOption) {
-                                    ForEach(SortOption.allCases, id: \.self) { option in
-                                        Text(option.rawValue).tag(option)
-                                    }
-                                }
-                            } label: {
-                                Image(systemName: "arrow.up.arrow.down.circle")
-                                    .font(.title3)
-                            }
-                        }
-                        .padding(.horizontal)
                         
-                        LazyVGrid(columns: [
-                            GridItem(.flexible(), spacing: 16),
-                            GridItem(.flexible(), spacing: 16)
+                        // Recent Podcasts Grid
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("Your Library")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                
+                                Spacer()
+                                
+                                Menu {
+                                    Picker("Sort", selection: $viewModel.sortOption) {
+                                        ForEach(SortOption.allCases, id: \.self) { option in
+                                            Text(option.rawValue).tag(option)
+                                        }
+                                    }
+                                } label: {
+                                    Image(systemName: "arrow.up.arrow.down.circle")
+                                        .font(.title3)
+                                }
+                            }
+                            .padding(.horizontal)
+                            
+                            if viewModel.filteredPodcasts.isEmpty && !viewModel.isGeneratingPodcast {
+                                EmptyLibraryView()
+                                    .padding(.horizontal)
+                            } else {
+                                LazyVGrid(columns: [
+                                    GridItem(.flexible(), spacing: 16),
+                                    GridItem(.flexible(), spacing: 16)
                         ], spacing: 20) {
                             ForEach(viewModel.filteredPodcasts) { podcast in
-                                NavigationLink(destination: PlayerView(podcast: podcast)) {
+                                NavigationLink(destination: PodcastDetailView(podcast: podcast)) {
                                     PodcastCard(podcast: podcast)
                                 }
                                 .contextMenu {
@@ -72,41 +76,37 @@ struct LibraryView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal)
+                                .padding(.horizontal)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 100)
+                }
+                .navigationTitle("Feedcast")
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            showingNewPodcast = true
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title3)
+                        }
+                        .disabled(viewModel.isGeneratingPodcast)
                     }
                 }
-                .padding(.bottom, 100)
-            }
-            .navigationTitle("Feedcast")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showingInterests = true
-                    } label: {
-                        Image(systemName: "star.circle.fill")
-                            .font(.title3)
+                .searchable(text: $viewModel.searchText, prompt: "Search podcasts")
+                .refreshable {
+                    await viewModel.refreshPodcasts()
+                }
+                .sheet(isPresented: $showingNewPodcast) {
+                    NewPodcastView { interests in
+                        viewModel.generateNewPodcast(interests: interests)
                     }
                 }
                 
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingNewPodcast = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title3)
-                    }
-                }
-            }
-            .searchable(text: $viewModel.searchText, prompt: "Search podcasts")
-            .refreshable {
-                await viewModel.refreshPodcasts()
-            }
-            .sheet(isPresented: $showingInterests) {
-                InterestsView()
-            }
-            .sheet(isPresented: $showingNewPodcast) {
-                NewPodcastView { interests in
-                    viewModel.generateNewPodcast(interests: interests)
+                // Podcast Generation Overlay
+                if viewModel.isGeneratingPodcast {
+                    PodcastGenerationOverlay(progress: viewModel.generationProgress ?? "Generating...")
                 }
             }
         }
@@ -275,6 +275,94 @@ struct NewPodcastView: View {
                     .disabled(selectedInterests.isEmpty)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Empty Library View
+
+struct EmptyLibraryView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "rectangle.stack.badge.plus")
+                .font(.system(size: 60))
+                .foregroundStyle(.secondary)
+            
+            Text("No Podcasts Yet")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            Text("Tap the + button to generate your first AI-powered podcast")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(40)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Podcast Generation Overlay
+
+struct PodcastGenerationOverlay: View {
+    let progress: String
+    @State private var animationRotation: Double = 0
+    
+    var body: some View {
+        ZStack {
+            // Blurred background
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+            
+            // Content card
+            VStack(spacing: 24) {
+                // Animated icon
+                ZStack {
+                    Circle()
+                        .stroke(
+                            LinearGradient(
+                                colors: [.blue, .purple, .pink],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 4
+                        )
+                        .frame(width: 80, height: 80)
+                        .rotationEffect(.degrees(animationRotation))
+                    
+                    Image(systemName: "waveform")
+                        .font(.system(size: 40))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.blue, .purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+                .onAppear {
+                    withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
+                        animationRotation = 360
+                    }
+                }
+                
+                VStack(spacing: 8) {
+                    Text("Creating Your Podcast")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                    
+                    Text(progress)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(40)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.ultraThinMaterial)
+            )
+            .padding(40)
         }
     }
 }

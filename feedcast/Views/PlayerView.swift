@@ -17,50 +17,82 @@ struct PlayerView: View {
     }
     
     var body: some View {
-        ZStack(alignment: .bottom) {
+        VStack(spacing: 0) {
             // Main Content
             ScrollView {
-                VStack(spacing: 0) {
+                VStack(spacing: 24) {
                     // Header with artwork
                     PodcastHeaderView(podcast: viewModel.podcast)
                         .padding(.top)
                     
                     // Player Controls
                     PlayerControlsView(viewModel: viewModel)
-                        .padding(.vertical, 24)
                     
-                    // Episodes List
-                    EpisodesListView(
-                        episodes: viewModel.podcast.episodes,
-                        currentEpisode: viewModel.currentEpisode
-                    ) { episode in
-                        viewModel.selectEpisode(episode)
-                    }
-                    .padding(.horizontal)
-                    
-                    // Podcast Info
-                    PodcastInfoView(podcast: viewModel.podcast)
+                    // Transcript Section
+                    if let transcript = viewModel.currentEpisode.transcript,
+                       let transcriptData = transcript.data(using: .utf8),
+                       let segments = try? JSONDecoder().decode([TranscriptSegment].self, from: transcriptData) {
+                        TranscriptView(
+                            segments: segments,
+                            currentTime: viewModel.currentTime
+                        ) { time in
+                            viewModel.seek(to: time)
+                        }
+                        .padding(.horizontal)
+                    } else {
+                        // Fallback: Show episode info
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("About This Episode")
+                                .font(.headline)
+                            
+                            Text(viewModel.currentEpisode.description)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                         .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
-                .padding(.bottom, viewModel.isChatVisible ? 400 : 100)
+                .padding(.bottom, 120) // Space for fixed chat input
             }
             
-            // Chat Overlay
-            if viewModel.isChatVisible {
-                ChatView(viewModel: viewModel)
-                    .transition(.move(edge: .bottom))
-            }
+            Divider()
+            
+            // Fixed Chat Input at Bottom
+            ChatInputView(viewModel: viewModel)
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    viewModel.toggleChat()
-                } label: {
-                    Image(systemName: viewModel.isChatVisible ? "message.fill" : "message")
-                        .font(.title3)
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 2) {
+                    Text(viewModel.podcast.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(viewModel.currentEpisode.title)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
+            
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    viewModel.showVoiceChat = true
+                } label: {
+                    Image(systemName: "waveform.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.blue, .purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+            }
+        }
+        .sheet(isPresented: $viewModel.showVoiceChat) {
+            VoiceChatView(viewModel: viewModel)
         }
     }
 }
@@ -180,158 +212,174 @@ struct PlayerControlsView: View {
     }
 }
 
-// MARK: - Episodes List View
+// MARK: - Transcript View
 
-struct EpisodesListView: View {
-    let episodes: [Episode]
-    let currentEpisode: Episode
-    let onSelect: (Episode) -> Void
+struct TranscriptView: View {
+    let segments: [TranscriptSegment]
+    let currentTime: TimeInterval
+    let onSeek: (TimeInterval) -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Episodes")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Transcript")
+                    .font(.headline)
+                
+                Spacer()
+                
+                Image(systemName: "doc.text")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
             
-            ForEach(episodes) { episode in
-                Button {
-                    onSelect(episode)
-                } label: {
-                    HStack(spacing: 12) {
-                        // Episode indicator
-                        Circle()
-                            .fill(episode.id == currentEpisode.id ? Color.blue : Color.gray.opacity(0.3))
-                            .frame(width: 8, height: 8)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(episode.title)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundStyle(.primary)
-                            
-                            Text(episode.description)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
+                    TranscriptSegmentRow(
+                        segment: segment,
+                        isActive: currentTime >= segment.startTime && currentTime < segment.endTime,
+                        onTap: {
+                            onSeek(segment.startTime)
                         }
-                        
-                        Spacer()
-                        
-                        Text(episode.formattedDuration)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(episode.id == currentEpisode.id ? Color.blue.opacity(0.1) : Color.clear)
                     )
                 }
             }
         }
+        .padding()
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 }
 
-// MARK: - Podcast Info View
-
-struct PodcastInfoView: View {
-    let podcast: Podcast
+struct TranscriptSegmentRow: View {
+    let segment: TranscriptSegment
+    let isActive: Bool
+    let onTap: () -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("About")
-                .font(.headline)
-            
-            Text(podcast.description)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            
-            HStack {
-                Text("Generated")
+        Button(action: onTap) {
+            HStack(alignment: .top, spacing: 12) {
+                // Timestamp
+                Text(formatTime(segment.startTime))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isActive ? .blue : .secondary)
+                    .frame(width: 50, alignment: .leading)
+                    .fontWeight(isActive ? .semibold : .regular)
                 
-                Text(podcast.createdAt, style: .date)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                // Text
+                Text(segment.text)
+                    .font(.subheadline)
+                    .foregroundStyle(isActive ? .primary : .secondary)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fontWeight(isActive ? .medium : .regular)
             }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isActive ? Color.blue.opacity(0.1) : Color.clear)
+            )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .buttonStyle(.plain)
+    }
+    
+    private func formatTime(_ time: TimeInterval) -> String {
+        let minutes = Int(time) / 60
+        let seconds = Int(time) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
 }
 
-// MARK: - Chat View
+// MARK: - Chat Input View (Fixed at Bottom)
 
-struct ChatView: View {
+struct ChatInputView: View {
     @ObservedObject var viewModel: PlayerViewModel
+    @State private var showMessages = false
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Ask About This Podcast")
-                        .font(.headline)
-                    Text("Chat with AI assistant")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                
-                Spacer()
-                
-                Button {
-                    viewModel.toggleChat()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding()
-            .background(.ultraThinMaterial)
-            
-            // Messages
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(viewModel.messages) { message in
-                            ChatMessageBubble(message: message)
-                                .id(message.id)
+            // Messages overlay (appears above input)
+            if showMessages {
+                VStack(spacing: 0) {
+                    // Header
+                    HStack {
+                        Text("Chat with AI")
+                            .font(.headline)
+                        
+                        Spacer()
+                        
+                        Button {
+                            withAnimation {
+                                showMessages = false
+                            }
+                        } label: {
+                            Image(systemName: "chevron.down.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .padding()
-                }
-                .onChange(of: viewModel.messages.count) { _, _ in
-                    if let lastMessage = viewModel.messages.last {
-                        withAnimation {
-                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    .background(.ultraThinMaterial)
+                    
+                    // Messages
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 12) {
+                                ForEach(viewModel.messages) { message in
+                                    ChatMessageBubble(message: message)
+                                        .id(message.id)
+                                }
+                            }
+                            .padding()
+                        }
+                        .onChange(of: viewModel.messages.count) { _, _ in
+                            if let lastMessage = viewModel.messages.last {
+                                withAnimation {
+                                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                                }
+                            }
                         }
                     }
+                    .frame(height: 300)
                 }
+                .background(.regularMaterial)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .frame(height: 280)
             
-            // Input
+            // Input field (always visible)
             HStack(spacing: 12) {
-                TextField("Ask a question...", text: $viewModel.messageText, axis: .vertical)
+                Button {
+                    withAnimation {
+                        showMessages.toggle()
+                    }
+                } label: {
+                    Image(systemName: showMessages ? "chevron.down" : "message")
+                        .font(.title3)
+                        .foregroundStyle(.blue)
+                        .frame(width: 32, height: 32)
+                }
+                
+                TextField("Ask about this podcast...", text: $viewModel.messageText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...3)
                 
                 Button {
                     viewModel.sendMessage()
+                    if !showMessages {
+                        withAnimation {
+                            showMessages = true
+                        }
+                    }
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title2)
+                        .foregroundStyle(viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : .blue)
                 }
                 .disabled(viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isSendingMessage)
             }
             .padding()
             .background(.ultraThinMaterial)
         }
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .shadow(radius: 20)
-        .padding(.horizontal)
-        .padding(.bottom, 80)
     }
 }
 
@@ -351,7 +399,7 @@ struct ChatMessageBubble: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
-                        message.sender == .user ? Color.blue : Color.gray.opacity(0.2)
+                        message.sender == .user ? Color.blue : Color.gray.opacity(0.15)
                     )
                     .foregroundStyle(message.sender == .user ? .white : .primary)
                     .clipShape(RoundedRectangle(cornerRadius: 16))

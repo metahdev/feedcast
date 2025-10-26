@@ -47,7 +47,7 @@ enum MessageSender: String, Codable {
 struct Conversation: Identifiable, Codable {
     let id: String
     let podcastId: String
-    let messages: [ChatMessage]
+    var messages: [ChatMessage]
     let lastUpdated: Date
     
     init(

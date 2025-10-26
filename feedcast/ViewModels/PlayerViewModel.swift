@@ -14,6 +14,7 @@
 import Foundation
 import Combine
 import AVFoundation
+import SwiftUI
 
 @MainActor
 class PlayerViewModel: ObservableObject {
@@ -32,11 +33,18 @@ class PlayerViewModel: ObservableObject {
     @Published var isChatVisible = false
     @Published var isSendingMessage = false
     
+    // Voice chat properties
+    @Published var showVoiceChat = false
+    @Published var isVoiceChatActive = false
+    @Published var voiceTranscript = ""
+    
     // MARK: - Private Properties
     private let chatService = ChatService.shared
     private let userService = UserService.shared
     private var cancellables = Set<AnyCancellable>()
     private var playbackTimer: Timer?
+    private var audioPlayer: AVPlayer?
+    private var timeObserver: Any?
     
     // MARK: - Initialization
     
@@ -52,6 +60,15 @@ class PlayerViewModel: ObservableObject {
         loadConversation()
         setupBindings()
         loadPlaybackState()
+        setupAudioPlayer()
+    }
+    
+    deinit {
+        if let observer = timeObserver {
+            audioPlayer?.removeTimeObserver(observer)
+        }
+        audioPlayer?.pause()
+        audioPlayer = nil
     }
     
     // MARK: - Playback Control
@@ -77,10 +94,14 @@ class PlayerViewModel: ObservableObject {
     }
     
     func seek(to time: TimeInterval) {
-        currentTime = min(max(time, 0), duration)
-        savePlaybackState()
+        let seekTime = min(max(time, 0), duration)
+        currentTime = seekTime
         
-        // TODO: Seek in actual audio player when LiveKit is integrated
+        // Seek in audio player
+        let cmTime = CMTime(seconds: seekTime, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        audioPlayer?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+        
+        savePlaybackState()
     }
     
     func skip(seconds: TimeInterval) {
@@ -89,17 +110,23 @@ class PlayerViewModel: ObservableObject {
     
     func changePlaybackRate(_ rate: Float) {
         playbackRate = rate
-        // TODO: Update actual audio player rate when LiveKit is integrated
+        audioPlayer?.rate = rate
     }
     
     func selectEpisode(_ episode: Episode) {
         savePlaybackState()
+        
+        let wasPlaying = isPlaying
+        pause()
+        
         currentEpisode = episode
         duration = episode.duration
         currentTime = 0
         
-        if isPlaying {
-            pause()
+        setupAudioPlayer()
+        
+        if wasPlaying {
+            play()
         }
     }
     
@@ -137,31 +164,91 @@ class PlayerViewModel: ObservableObject {
     
     // MARK: - Private Methods
     
-    private func startPlayback() {
-        // TODO: Start actual audio playback when LiveKit is integrated
+    private func setupAudioPlayer() {
+        print("🎵 Setting up audio player for episode: \(currentEpisode.title)")
         
-        // Simulate playback with timer
-        playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+        // Remove old observer
+        if let observer = timeObserver {
+            audioPlayer?.removeTimeObserver(observer)
+            timeObserver = nil
+        }
+        
+        guard let audioURLString = currentEpisode.audioURL,
+              let audioURL = URL(string: audioURLString) else {
+            print("❌ No valid audio URL for episode")
+            return
+        }
+        
+        print("🔗 Audio URL: \(audioURL)")
+        
+        // Create player with URL
+        let playerItem = AVPlayerItem(url: audioURL)
+        audioPlayer = AVPlayer(playerItem: playerItem)
+        audioPlayer?.rate = playbackRate
+        
+        // Observe playback time
+        let interval = CMTime(seconds: 0.1, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        timeObserver = audioPlayer?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self else { return }
-            Task { @MainActor in
-                self.currentTime += 0.1 * Double(self.playbackRate)
-                
-                if self.currentTime >= self.duration {
-                    self.currentTime = self.duration
-                    self.pause()
-                }
-                
-                // Save state periodically
-                if Int(self.currentTime) % 10 == 0 {
-                    self.savePlaybackState()
-                }
+            self.currentTime = time.seconds
+            
+            // Save state periodically
+            if Int(self.currentTime) % 10 == 0 {
+                self.savePlaybackState()
             }
         }
+        
+        // Observe when playback finishes
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: playerItem,
+            queue: .main
+        ) { [weak self] _ in
+            self?.pause()
+            self?.currentTime = 0
+            self?.seek(to: 0)
+        }
+        
+        // Observe player status
+        audioPlayer?.currentItem?.publisher(for: \.status)
+            .sink { [weak self] status in
+                switch status {
+                case .readyToPlay:
+                    print("✅ Audio ready to play")
+                    // Get actual duration from the audio file
+                    if let duration = self?.audioPlayer?.currentItem?.duration.seconds,
+                       duration.isFinite {
+                        self?.duration = duration
+                        print("📊 Actual duration: \(duration) seconds")
+                    }
+                case .failed:
+                    print("❌ Audio player failed: \(self?.audioPlayer?.currentItem?.error?.localizedDescription ?? "Unknown error")")
+                case .unknown:
+                    print("⏳ Audio player status unknown")
+                @unknown default:
+                    break
+                }
+            }
+            .store(in: &cancellables)
+        
+        print("✅ Audio player set up successfully")
+    }
+    
+    private func startPlayback() {
+        guard audioPlayer != nil else {
+            print("⚠️ No audio player available, setting up...")
+            setupAudioPlayer()
+            return 
+        }
+        
+        print("▶️ Starting playback at \(currentTime) seconds")
+        audioPlayer?.play()
+        audioPlayer?.rate = playbackRate
     }
     
     private func pausePlayback() {
-        playbackTimer?.invalidate()
-        playbackTimer = nil
+        print("⏸️ Pausing playback")
+        audioPlayer?.pause()
         savePlaybackState()
     }
     

@@ -13,6 +13,7 @@
 
 import Foundation
 import Combine
+import Supabase
 
 /// Service for managing chat functionality
 class ChatService: ObservableObject {
@@ -26,9 +27,13 @@ class ChatService: ObservableObject {
     
     // MARK: - Private Properties
     private var cancellables = Set<AnyCancellable>()
+    private var supabase: SupabaseClient? {
+        guard Config.isSupabaseConfigured else { return nil }
+        return SupabaseManager.shared.client
+    }
     
     private init() {
-        loadDummyConversations()
+        // Don't load dummy data - fetch from Supabase when needed
     }
     
     // MARK: - Public Methods
@@ -44,6 +49,51 @@ class ChatService: ObservableObject {
         return newConversation
     }
     
+    /// Load conversation from Supabase
+    func loadConversation(for podcastId: String) async throws {
+        guard let supabase = supabase else { return }
+        
+        struct MessageResponse: Codable {
+            let id: String
+            let podcast_id: String
+            let episode_id: String?
+            let user_id: String
+            let content: String
+            let sender: String
+            let timestamp: String
+        }
+        
+        let messagesData: [MessageResponse] = try await supabase
+            .from("chat_messages")
+            .select()
+            .eq("podcast_id", value: podcastId)
+            .order("timestamp", ascending: true)
+            .execute()
+            .value
+        
+        let messages = messagesData.map { data in
+            ChatMessage(
+                id: data.id,
+                podcastId: data.podcast_id,
+                episodeId: data.episode_id,
+                content: data.content,
+                sender: MessageSender(rawValue: data.sender) ?? .user,
+                timestamp: ISO8601DateFormatter().date(from: data.timestamp) ?? Date(),
+                isTyping: false
+            )
+        }
+        
+        let conversation = Conversation(
+            podcastId: podcastId,
+            messages: messages,
+            lastUpdated: messages.last?.timestamp ?? Date()
+        )
+        
+        await MainActor.run {
+            conversations[podcastId] = conversation
+        }
+    }
+    
     /// Send a message and get AI response
     /// TODO: Integrate with FetchAI for intelligent responses
     func sendMessage(
@@ -52,8 +102,15 @@ class ChatService: ObservableObject {
         content: String,
         podcast: Podcast?
     ) async throws -> ChatMessage {
+        guard let supabase = supabase else {
+            throw NSError(domain: "ChatService", code: 500, userInfo: [NSLocalizedDescriptionKey: "Supabase not configured"])
+        }
         
-        // Add user message
+        guard let userId = UserService.shared.currentUser?.id else {
+            throw NSError(domain: "ChatService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        // Create user message
         let userMessage = ChatMessage(
             podcastId: podcastId,
             episodeId: episodeId,
@@ -61,6 +118,10 @@ class ChatService: ObservableObject {
             sender: .user
         )
         
+        // Save user message to Supabase
+        try await saveMessage(userMessage, userId: userId)
+        
+        // Update local state
         await MainActor.run {
             var conversation = getConversation(for: podcastId)
             conversation.messages.append(userMessage)
@@ -68,11 +129,14 @@ class ChatService: ObservableObject {
             isProcessing = true
         }
         
-        // Simulate AI processing
-        try await Task.sleep(nanoseconds: 1_500_000_000)
-        
-        // Generate AI response (dummy logic)
-        let aiResponse = generateDummyResponse(for: content, podcast: podcast)
+        // Generate AI response with podcast context
+        isProcessing = true
+        let aiResponse: String
+        if let podcast = podcast {
+            aiResponse = try await generateAIResponse(for: content, podcast: podcast, podcastId: podcastId)
+        } else {
+            aiResponse = "I'm sorry, I don't have enough context about this podcast to answer your question properly."
+        }
         let aiMessage = ChatMessage(
             podcastId: podcastId,
             episodeId: episodeId,
@@ -80,6 +144,10 @@ class ChatService: ObservableObject {
             sender: .ai
         )
         
+        // Save AI message to Supabase
+        try await saveMessage(aiMessage, userId: userId)
+        
+        // Update local state
         await MainActor.run {
             var conversation = getConversation(for: podcastId)
             conversation.messages.append(aiMessage)
@@ -95,12 +163,155 @@ class ChatService: ObservableObject {
         return aiMessage
     }
     
+    /// Save a message to Supabase
+    private func saveMessage(_ message: ChatMessage, userId: String) async throws {
+        guard let supabase = supabase else { return }
+        
+        struct MessageInsert: Codable {
+            let id: String
+            let podcast_id: String
+            let episode_id: String?
+            let user_id: String
+            let content: String
+            let sender: String
+        }
+        
+        let messageInsert = MessageInsert(
+            id: message.id,
+            podcast_id: message.podcastId,
+            episode_id: message.episodeId,
+            user_id: userId,
+            content: message.content,
+            sender: message.sender.rawValue
+        )
+        
+        try await supabase
+            .from("chat_messages")
+            .insert(messageInsert)
+            .execute()
+    }
+    
     /// Clear conversation for a podcast
-    func clearConversation(for podcastId: String) {
-        conversations[podcastId] = Conversation(podcastId: podcastId)
+    func clearConversation(for podcastId: String) async throws {
+        guard let supabase = supabase else { return }
+        
+        // Delete from Supabase
+        try await supabase
+            .from("chat_messages")
+            .delete()
+            .eq("podcast_id", value: podcastId)
+            .execute()
+        
+        // Update local state
+        await MainActor.run {
+            conversations[podcastId] = Conversation(podcastId: podcastId)
+        }
     }
     
     // MARK: - Private Methods
+    
+    /// Generate AI response using OpenAI with full podcast context
+    private func generateAIResponse(for userMessage: String, podcast: Podcast, podcastId: String) async throws -> String {
+        // Build context from podcast and conversation history
+        let conversation = getConversation(for: podcastId)
+        let context = buildPodcastContext(podcast: podcast, conversation: conversation)
+        
+        // Check if OpenAI is configured
+        guard Config.isOpenAIConfigured else {
+            print("⚠️ OpenAI not configured, using fallback response")
+            return generateDummyResponse(for: userMessage, podcast: podcast)
+        }
+        
+        do {
+            return try await callOpenAI(userMessage: userMessage, context: context)
+        } catch {
+            print("❌ OpenAI chat failed: \(error), using fallback")
+            return generateDummyResponse(for: userMessage, podcast: podcast)
+        }
+    }
+    
+    /// Build context from podcast and conversation
+    private func buildPodcastContext(podcast: Podcast, conversation: Conversation) -> String {
+        var context = """
+        You are an AI assistant helping users understand and discuss a podcast.
+        
+        Podcast Information:
+        - Title: \(podcast.title)
+        - Description: \(podcast.description)
+        - Topics: \(podcast.interests.joined(separator: ", "))
+        
+        """
+        
+        // Add transcript if available
+        if let episode = podcast.episodes.first,
+           let transcript = episode.transcript,
+           !transcript.isEmpty {
+            context += "\nPodcast Content:\n\(transcript.prefix(2000))\n"
+        }
+        
+        // Add recent conversation history
+        let recentMessages = conversation.messages.suffix(6).dropLast() // Last 6 messages, excluding current
+        if !recentMessages.isEmpty {
+            context += "\nConversation History:\n"
+            for msg in recentMessages {
+                context += "\(msg.sender == .user ? "User" : "AI"): \(msg.content)\n"
+            }
+        }
+        
+        context += """
+        
+        Instructions:
+        - Answer based on the podcast content
+        - Be conversational and helpful
+        - Keep responses 2-3 paragraphs max
+        - If asked about something not in the podcast, acknowledge it but still provide helpful information
+        """
+        
+        return context
+    }
+    
+    /// Call OpenAI API
+    private func callOpenAI(userMessage: String, context: String) async throws -> String {
+        let url = URL(string: "https://api.openai.com/v1/chat/completions")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(Config.openAIAPIKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let messages: [[String: String]] = [
+            ["role": "system", "content": context],
+            ["role": "user", "content": userMessage]
+        ]
+        
+        let body: [String: Any] = [
+            "model": "gpt-4o",
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 400
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, _) = try await URLSession.shared.data(for: request)
+        
+        struct ChatResponse: Codable {
+            struct Choice: Codable {
+                struct Message: Codable {
+                    let content: String
+                }
+                let message: Message
+            }
+            let choices: [Choice]
+        }
+        
+        let response = try JSONDecoder().decode(ChatResponse.self, from: data)
+        
+        guard let content = response.choices.first?.message.content else {
+            throw NSError(domain: "ChatService", code: 500, userInfo: [NSLocalizedDescriptionKey: "No response"])
+        }
+        
+        return content
+    }
     
     private func generateDummyResponse(for message: String, podcast: Podcast?) -> String {
         let lowercased = message.lowercased()
@@ -126,28 +337,5 @@ class ChatService: ObservableObject {
         return formatter.string(from: date)
     }
     
-    private func loadDummyConversations() {
-        // Load some example conversations
-        let exampleMessages = [
-            ChatMessage(
-                podcastId: "1",
-                content: "What is this podcast about?",
-                sender: .user,
-                timestamp: Date().addingTimeInterval(-300)
-            ),
-            ChatMessage(
-                podcastId: "1",
-                content: "This podcast covers your interests in Technology, AI, and Innovation with 2 episodes focused on recent breakthroughs and industry trends.",
-                sender: .ai,
-                timestamp: Date().addingTimeInterval(-290)
-            )
-        ]
-        
-        conversations["1"] = Conversation(
-            podcastId: "1",
-            messages: exampleMessages,
-            lastUpdated: Date().addingTimeInterval(-290)
-        )
-    }
 }
 

@@ -1,0 +1,89 @@
+//
+//  Config.swift
+//  feedcast
+//
+//  Configuration for Supabase and other services
+//
+
+import Foundation
+
+enum Config {
+    // MARK: - Supabase Configuration
+    
+    /// Supabase project URL
+    /// Get this from: Supabase Dashboard → Settings → API → Project URL
+    static let supabaseURL = "YOUR_SUPABASE_URL" // e.g., "https://xxxxx.supabase.co"
+    
+    /// Supabase anonymous key (safe for client-side)
+    /// Get this from: Supabase Dashboard → Settings → API → Project API keys → anon/public
+    static let supabaseAnonKey = "YOUR_SUPABASE_ANON_KEY"
+    
+    // MARK: - OpenAI Configuration
+    
+    /// OpenAI API Key for GPT and TTS
+    static let openAIAPIKey = "YOUR_OPENAI_API_KEY"
+    
+    // MARK: - Future Integration Keys
+    
+    /// FetchAI configuration (for future use)
+    static let fetchAIBaseURL = "YOUR_FETCHAI_URL"
+    static let fetchAIAPIKey = "YOUR_FETCHAI_KEY"
+    
+    /// LiveKit configuration
+    /// NOTE: iOS app does NOT need API keys!
+    /// Use one of these three options:
+    
+    // Option 1: Sandbox ID (recommended for development)
+    // Get from: https://cloud.livekit.io/projects/p_/sandbox/templates/token-server
+    static let liveKitSandboxId: String? = nil  // e.g., "sb_xxxxxxxxxxxxxxxx"
+    
+    // Option 2: Hardcoded token (quick testing only, expires in hours)
+    // Generate with: lk token create --join --room test-room --identity user1
+    static let liveKitHardcodedToken: String? = nil
+    static let liveKitURL = "wss://YOUR_PROJECT.livekit.cloud"  // Only needed if using hardcoded token
+    
+    // Option 3: Your own token server (production)
+    // Configure endpoint in VoiceChatView.swift → fetchTokenFromServer()
+    
+    // MARK: - Helper Methods
+    
+    /// Check if Supabase is configured
+    static var isSupabaseConfigured: Bool {
+        return !supabaseURL.contains("YOUR_") && !supabaseAnonKey.contains("YOUR_")
+    }
+    
+    /// Check if OpenAI is configured
+    static var isOpenAIConfigured: Bool {
+        return !openAIAPIKey.isEmpty && !openAIAPIKey.contains("YOUR_")
+    }
+    
+    /// Check if LiveKit is configured (sandbox, hardcoded token, or custom server)
+    static var isLiveKitConfigured: Bool {
+        // Has sandbox ID?
+        if let sandboxId = liveKitSandboxId, !sandboxId.isEmpty {
+            return true
+        }
+        // Has hardcoded token?
+        if let token = liveKitHardcodedToken, !token.isEmpty {
+            return true
+        }
+        // Assume custom token server is configured
+        return true
+    }
+}
+
+/*
+ SETUP INSTRUCTIONS:
+ 
+ 1. Go to https://supabase.com
+ 2. Create a new project (or use existing)
+ 3. Go to Settings → API
+ 4. Copy your Project URL
+ 5. Copy your anon/public key
+ 6. Replace the values above
+ 
+ Example:
+ static let supabaseURL = "https://abcdefghijk.supabase.co"
+ static let supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ */
+
